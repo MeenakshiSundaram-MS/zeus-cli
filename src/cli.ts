@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
-import { initZeus } from "./config/localConfig.ts";
+import { initZeus, isInitialized } from "./config/localConfig.ts";
 import { formatterFor } from "./formatters/index.ts";
 import { OllamaAdapter } from "./inference/ollamaAdapter.ts";
 import { startInteractive } from "./interactive.ts";
@@ -18,6 +18,7 @@ interface CliDeps {
   inference: OllamaAdapter;
   search: SearchProvider;
   registry: LocalRegistry;
+  homeDir?: string;
 }
 
 function parseFlag(argv: string[], flag: string): string | undefined {
@@ -83,21 +84,49 @@ function print(result: CommandResult, format: OutputFormat): string {
 
 function helpText(): string {
   return [
-    "Zeus CLI",
+    "Zeus CLI — Local AI Agent (Ollama-first)",
     "",
-    "Commands:",
-    "  zeus",
-    "  zeus init [--home <dir>] [--force]",
-    "  zeus ask <prompt>",
-    "  zeus search <query> [--provider <auto|duckduckgo|brave|serpapi>] --format <markdown|json|csv|txt>",
-    "  zeus contacts find --source <csv|urls> [--file <csv>] [--urls <comma>] [--role ... --industry ... --location ... --company-size ...]",
-    "  zeus content blog --topic <topic> --voice <profile>",
-    "  zeus content hook --platform <linkedin|x> --topic <topic> --voice <profile>",
-    "  zeus content voice create --id <id> --tone <tone> --audience <audience> --guidelines <a;b;c>",
+    "SETUP",
+    "  zeus init                          Initialize ~/.zeus workspace",
+    "  zeus init --force                  Reset config to defaults",
+    "  zeus doctor                        Check Ollama, config, and search providers",
+    "",
+    "CORE",
+    "  zeus ask <prompt>                  Prompt the local LLM",
+    "  zeus search <query>                Web search (DuckDuckGo by default)",
+    "  zeus research <question>           Research + synthesize a topic",
+    "",
+    "CONTENT",
+    "  zeus content blog --topic <t> --voice <v>              Generate SEO blog draft",
+    "  zeus content hook --platform <linkedin|x> --topic <t> --voice <v>  Generate hook post",
+    "  zeus content voice create --id <id> --tone <t> --audience <a> --guidelines <x;y>",
     "  zeus content voice list",
-    "  zeus research <question> --format <markdown|json|csv|txt>",
+    "",
+    "CONTACTS",
+    "  zeus contacts find --source csv --file <path>          Parse LinkedIn CSV export",
+    "  zeus contacts find --source urls --urls <url1,url2>    Parse profile URLs",
+    "  Filters: --role  --industry  --location  --company-size",
+    "",
+    "EXTENSIONS",
     "  zeus skill create|install|list|remove|validate",
-    "  zeus tool create|install|list|remove|validate"
+    "  zeus tool   create|install|list|remove|validate",
+    "",
+    "OPTIONS",
+    "  --format <markdown|json|csv|txt>   Output format (default: markdown)",
+    "  --provider <auto|duckduckgo|brave|serpapi>  Search provider",
+    "",
+    "ENV VARS",
+    "  OLLAMA_BASE_URL   Ollama server URL (default: http://localhost:11434)",
+    "  OLLAMA_MODEL      Model to use     (default: llama3.2)",
+    "  BRAVE_API_KEY     Brave Search API key",
+    "  SERPAPI_API_KEY   SerpAPI key",
+    "  ZEUS_SEARCH_PROVIDER  Default search provider",
+    "",
+    "QUICKSTART",
+    "  ollama serve && ollama pull llama3.2",
+    "  zeus init",
+    "  zeus ask \"What is a vector database?\"",
+    "  zeus doctor"
   ].join("\n");
 }
 
@@ -214,6 +243,8 @@ export async function runCli(argv: string[], deps?: Partial<CliDeps>): Promise<s
   const provider = parseFlag(argv, "--provider");
   const search = deps?.search ?? createSearchProvider({ preferred: provider });
   const registry = deps?.registry ?? new LocalRegistry();
+  const homeDir = deps?.homeDir ?? parseFlag(argv, "--home");
+  const checkInit = () => isInitialized(homeDir);
 
   if (!argv.length || argv.includes("--help")) {
     return `${helpText()}\n`;
@@ -222,10 +253,39 @@ export async function runCli(argv: string[], deps?: Partial<CliDeps>): Promise<s
   const [command, ...args] = argv;
   const format = parseFormat(args);
 
+  if (command === "doctor") {
+    const lines: string[] = ["Zeus environment check", ""];
+
+    const initialized = await checkInit();
+    lines.push(`  Config (~/.zeus/config.json) : ${initialized ? "OK" : "NOT FOUND — run: zeus init"}`);
+
+    const ollamaHealth = await inference.health();
+    lines.push(`  Ollama                       : ${ollamaHealth.ok ? `OK — ${ollamaHealth.message}` : `UNREACHABLE — ${ollamaHealth.message}`}`);
+
+    const braveKey = process.env.BRAVE_API_KEY;
+    const serpApiKey = process.env.SERPAPI_API_KEY;
+    const providers = ["duckduckgo (built-in)", braveKey ? "brave" : null, serpApiKey ? "serpapi" : null]
+      .filter(Boolean)
+      .join(", ");
+    lines.push(`  Search providers             : ${providers}`);
+    if (!braveKey && !serpApiKey) {
+      lines.push("    Tip: set BRAVE_API_KEY or SERPAPI_API_KEY for higher quality results");
+    }
+
+    const allOk = initialized && ollamaHealth.ok;
+    lines.push("");
+    lines.push(allOk ? "All checks passed. Zeus is ready." : "Some checks failed — see above.");
+
+    return `${lines.join("\n")}\n`;
+  }
+
   if (command === "ask") {
     const prompt = stripFlags(args).join(" ").trim();
     if (!prompt) {
       throw new Error("ask requires a prompt");
+    }
+    if (!(await checkInit())) {
+      throw new Error("Zeus is not initialized — run: zeus init");
     }
     const response = await inference.generate({ prompt });
     return print(
@@ -239,17 +299,20 @@ export async function runCli(argv: string[], deps?: Partial<CliDeps>): Promise<s
   }
 
   if (command === "init") {
-    const homeDir = parseFlag(args, "--home");
+    const initHome = parseFlag(args, "--home");
     const force = args.includes("--force");
-    const result = await initZeus({ homeDir, force });
-    return print(
-      {
-        kind: "init.complete",
-        summary: result.createdConfig ? "Initialized Zeus local workspace" : "Zeus local workspace already initialized",
-        data: { ...result }
-      },
+    const result = await initZeus({ homeDir: initHome, force });
+    const summary = result.createdConfig
+      ? `Initialized Zeus workspace at ${result.configPath}`
+      : `Zeus workspace already exists at ${result.configPath} (use --force to reset)`;
+    const structured = print(
+      { kind: "init.complete", summary, data: { ...result } },
       format
     );
+    if (format === "markdown" && result.createdConfig) {
+      return `${structured}\nNext steps:\n  1. Start Ollama:  ollama serve\n  2. Pull a model: ollama pull llama3.2\n  3. Check setup:  zeus doctor\n  4. Try it:       zeus ask "Hello"\n`;
+    }
+    return structured;
   }
 
   if (command === "search") {
@@ -307,6 +370,9 @@ export async function runCli(argv: string[], deps?: Partial<CliDeps>): Promise<s
   }
 
   if (command === "content") {
+    if (args[0] !== "voice" && !(await isInitialized())) {
+      throw new Error("Zeus is not initialized — run: zeus init");
+    }
     if (args[0] === "voice" && args[1] === "create") {
       const id = parseFlag(args, "--id");
       const tone = parseFlag(args, "--tone");
@@ -386,6 +452,9 @@ export async function runCli(argv: string[], deps?: Partial<CliDeps>): Promise<s
     const question = stripFlags(args).join(" ").trim();
     if (!question) {
       throw new Error("research requires a question");
+    }
+    if (!(await checkInit())) {
+      throw new Error("Zeus is not initialized — run: zeus init");
     }
     const result = await runResearchPipeline(question, inference, search);
     return print(result, format);

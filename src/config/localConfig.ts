@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -69,4 +69,22 @@ export async function initZeus(options: InitOptions = {}): Promise<InitResult> {
   }
 
   return { configPath, skillsDir, toolsDir, voicesPath, createdConfig };
+}
+
+export async function isInitialized(homeDir = homedir()): Promise<boolean> {
+  try {
+    await access(join(zeusHome(homeDir), "config.json"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function readConfig(homeDir = homedir()): Promise<ZeusConfig> {
+  try {
+    const content = await readFile(join(zeusHome(homeDir), "config.json"), "utf8");
+    return JSON.parse(content) as ZeusConfig;
+  } catch {
+    return defaultConfig(homeDir);
+  }
 }

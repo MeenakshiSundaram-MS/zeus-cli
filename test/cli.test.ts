@@ -13,7 +13,11 @@ test("runCli shows help", async () => {
 });
 
 test("runCli ask command returns json format", async () => {
+  const home = await mkdtemp(join(tmpdir(), "zeus-ask-home-"));
+  await runCli(["init", "--home", home]);
+
   const out = await runCli(["ask", "hello", "--format", "json"], {
+    homeDir: home,
     inference: {
       async generate() {
         return { text: "world", model: "fake" };
