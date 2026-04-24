@@ -1,6 +1,6 @@
 {
   "name": "@developed-by-ms/zeus-cli",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Zeus OSS CLI Agent (Ollama-first, extensible skills and tools)",
   "type": "module",
   "packageManager": "npm@11.6.2",
