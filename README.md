@@ -3,7 +3,7 @@
 > Local-first AI agent for research, content, and contact workflows — powered by Ollama.
 
 [![CI](https://github.com/MeenakshiSundaram-MS/zeus-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/MeenakshiSundaram-MS/zeus-cli/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/zeus-cli)](https://www.npmjs.com/package/zeus-cli)
+[![npm version](https://img.shields.io/npm/v/@developed-by-ms/zeus-cli)](https://www.npmjs.com/package/@developed-by-ms/zeus-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js ≥20](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
@@ -63,7 +63,7 @@ Zeus runs entirely on your machine. No cloud accounts, no API keys required to g
 ### From npm (recommended)
 
 ```bash
-npm install -g zeus-cli
+npm install -g @developed-by-ms/zeus-cli
 zeus init
 zeus doctor
 ```
