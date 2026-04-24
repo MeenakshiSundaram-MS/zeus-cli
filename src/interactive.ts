@@ -1,9 +1,10 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
+import { isInitialized } from "./config/localConfig.ts";
 
 export type CommandHandler = (argv: string[]) => Promise<string>;
 
-const COMMANDS = new Set(["ask", "search", "contacts", "content", "research", "skill", "tool", "init"]);
+const COMMANDS = new Set(["ask", "search", "contacts", "content", "research", "skill", "tool", "init", "doctor"]);
 
 export function splitArgs(line: string): string[] {
   const args: string[] = [];
@@ -53,7 +54,14 @@ function toCommand(line: string): string[] {
 }
 
 export async function startInteractive(handler: CommandHandler): Promise<void> {
-  output.write("Zeus interactive shell\nType /help for commands, /exit to leave.\n\n");
+  output.write("Zeus CLI — Local AI Agent\n");
+  output.write("Type /help for commands, /exit to quit.\n");
+
+  const initialized = await isInitialized();
+  if (!initialized) {
+    output.write("\nFirst time? Run: zeus init\n");
+  }
+  output.write("\n");
 
   const rl = createInterface({ input, output });
   try {

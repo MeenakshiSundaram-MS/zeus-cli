@@ -1,11 +1,11 @@
 {
-  "name": "zeus-cli",
-  "version": "0.1.0",
+  "name": "@developed-by-ms/zeus-cli",
+  "version": "0.1.2",
   "description": "Zeus OSS CLI Agent (Ollama-first, extensible skills and tools)",
   "type": "module",
   "packageManager": "npm@11.6.2",
   "bin": {
-    "zeus": "./dist/cli.js"
+    "zeus": "dist/cli.js"
   },
   "files": [
     "dist",
