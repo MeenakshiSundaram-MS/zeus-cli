@@ -47,14 +47,37 @@ function parseCsvLine(line: string): string[] {
   return values;
 }
 
+const REQUIRED_HEADERS = ["name", "role", "industry", "location"];
+
 export async function parseLinkedInCsv(path: string): Promise<Contact[]> {
-  const content = await readFile(path, "utf8");
+  let content: string;
+  try {
+    content = await readFile(path, "utf8");
+  } catch {
+    throw new Error(
+      `Could not read file: ${path}\n` +
+      "Export your LinkedIn connections:\n" +
+      "  LinkedIn > Me > Settings > Data Privacy > Get a copy of your data > Connections"
+    );
+  }
+
   const lines = content.split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) {
-    return [];
+    throw new Error(
+      `CSV file is empty or has no data rows: ${path}\n` +
+      "Expected columns: name, role, industry, location, company_size, profile_url"
+    );
   }
 
   const headers = parseCsvLine(lines[0]).map((header) => header.toLowerCase());
+  const missing = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
+  if (missing.length > 0) {
+    throw new Error(
+      `CSV is missing required columns: ${missing.join(", ")}\n` +
+      `Found columns: ${headers.join(", ")}\n` +
+      "Expected columns: name, role, industry, location, company_size, profile_url"
+    );
+  }
 
   return lines.slice(1).map((line) => {
     const cols = parseCsvLine(line);
